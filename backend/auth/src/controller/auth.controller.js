@@ -130,3 +130,45 @@ export async function googleAuthCallback(req, res) {
     },
   });
 }
+
+
+export async function login(req, res) {
+  const { email, password } = req.body;
+
+  const user = await userModel.findOne({ email });
+
+  if (!user) {
+    return res.status(400).json({
+      message: "Invalid Credentials",
+    });
+  }
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+
+  if (!isPasswordValid) {
+    return res.status(400).json({
+      message: "Invalid Credentials",
+    });
+  }
+
+  const token = jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+    },
+    config.JWT_SECRET,
+    { expiresIn: "7d" },
+  );
+
+  res.cookie("token", token);
+
+  res.status(200).json({
+    message: "Login Successfully",
+    user: {
+      id: user._id,
+      email: user.email,
+      fullname: user.fullname,
+      role: user.role,
+    },
+  });
+  
+}

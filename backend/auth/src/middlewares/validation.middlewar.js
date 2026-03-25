@@ -17,3 +17,9 @@ export const registerUSerValidationRules =[
     body('fullname.lastName').notEmpty().withMessage('Last name is required'),
     validate
 ]
+
+export const loginUserValidationRules =[
+    body('email').isEmail().withMessage('Invalid mail address'),
+    body('password').notEmpty().withMessage("Password is required"),
+    validate
+]
