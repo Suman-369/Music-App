@@ -2,6 +2,7 @@ import userModel from "../model/user.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import config from "../config/config.js";
+import { publishToQueue } from "../broker/rabbit.js";
 
 // register functionality
 
@@ -40,6 +41,13 @@ export async function register(req, res) {
     { expiresIn: "7d" },
   );
 
+  await publishToQueue("user_created", {
+    id: user._id,
+    email: user.email,
+    fullname: user.fullname,
+    role: user.role,
+  });
+
   res.cookie("token", token);
 
   res.status(201).json({
@@ -53,5 +61,72 @@ export async function register(req, res) {
   });
 }
 
+export async function googleAuthCallback(req, res) {
+  const user = req.user;
+
+  const isUserAlreadyExist = await userModel.findOne({
+    $or: [{ email: user.emails[0].value }, { googleId: user.id }],
+  });
+
+  if (isUserAlreadyExist) {
+    const token = jwt.sign(
+      {
+        id: isUserAlreadyExist._id,
+        role: isUserAlreadyExist.role,
+      },
+      config.JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+
+    res.cookie("token", token);
+
+    return res.status(200).json({
+      message: "Login Successfully",
+      user: {
+        id: isUserAlreadyExist._id,
+        email: isUserAlreadyExist.email,
+        fullname: isUserAlreadyExist.fullname,
+        role: isUserAlreadyExist.role,
+      },
+    });
+  }
+
+  const newUser = await userModel.create({
+    googleId: user.id,
+    email: user.emails[0].value,
+    fullname: {
+      firstName: user.name.givenName,
+      lastName: user.name.familyName,
+    },
+  });
 
 
+  await publishToQueue("user_created", {
+    id: newUser._id,
+    email: newUser.email,
+    fullname: newUser.fullname,
+    role: newUser.role,
+  });
+
+
+  const token = jwt.sign(
+    {
+      id: newUser._id,
+      role: newUser.role,
+    },
+    config.JWT_SECRET,
+    { expiresIn: "7d" },
+  );
+
+  res.cookie("token", token);
+
+  res.status(200).json({
+    message: "user created Successfully",
+    user: {
+      id: newUser._id,
+      email: newUser.email,
+      fullname: newUser.fullname,
+      role: newUser.role,
+    },
+  });
+}
